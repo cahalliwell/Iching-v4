@@ -631,51 +631,65 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 // 📜 Hexagram data helpers
-const SHEET_URL =
-  "https://opensheet.elk.sh/1IYLzxYHomdVern98otj9Ff4C31qiJwK2S65tHMIJIC0/Sheet1";
-
 const clean = (value) => (value == null ? "" : String(value).trim());
+
+function normalizeKey(key = "") {
+  return String(key)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+function pickField(map, ...keys) {
+  for (const k of keys) {
+    if (map[k] !== undefined && map[k] !== null && map[k] !== "") {
+      return map[k];
+    }
+  }
+  return "";
+}
 
 export const normalizeHexagramRow = (row) => {
   const map = {};
   Object.keys(row || {}).forEach((key) => {
-    const normalized = String(key)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_|_$/g, "");
+    const normalized = normalizeKey(key);
     map[normalized] = row[key];
   });
   const changingLines = [
-    map.cl1 || map.cl_1 || map["changing_line_1"] || "",
-    map.cl2 || map.cl_2 || map["changing_line_2"] || "",
-    map.cl3 || map.cl_3 || map["changing_line_3"] || "",
-    map.cl4 || map.cl_4 || map["changing_line_4"] || "",
-    map.cl5 || map.cl_5 || map["changing_line_5"] || "",
-    map.cl6 || map.cl_6 || map["changing_line_6"] || "",
+    pickField(map, "cl1", "cl_1", "changing_line_1"),
+    pickField(map, "cl2", "cl_2", "changing_line_2"),
+    pickField(map, "cl3", "cl_3", "changing_line_3"),
+    pickField(map, "cl4", "cl_4", "changing_line_4"),
+    pickField(map, "cl5", "cl_5", "changing_line_5"),
+    pickField(map, "cl6", "cl_6", "changing_line_6"),
   ].map(clean);
 
   return {
-    number: parseInt(map.number || map.no || map.hexagram || "0", 10) || null,
-    name: clean(map.name || map.title),
-    nature: clean(map.nature || map.trigrams || map.image),
-    essence: clean(map.essence || map.judgment || map.judgement || map.meaning),
+    number: parseInt(pickField(map, "number", "no", "hexagram") || "0", 10) || null,
+    name: clean(pickField(map, "name", "title")),
+    nature: clean(pickField(map, "nature", "trigrams", "image")),
+    essence: clean(pickField(map, "essence", "judgment", "judgement", "meaning")),
     description: clean(
-      map.description ||
-        map.summary ||
-        map.overview ||
-        map.image_text ||
-        map["image:_text"] ||
-        map.imagetext
+      pickField(
+        map,
+        "description",
+        "summary",
+        "overview",
+        "image_text",
+        "image_text",
+        "imagetext"
+      )
     ),
-    imageUrl: clean(map.image || map.image_url || map["image url"]) || null,
-    linesBinary: (map.lines || "")
+    imageUrl: clean(pickField(map, "image", "image_url", "image_url")) || null,
+    linesBinary: (pickField(map, "lines") || "")
       .replace(/⚊/g, "1")
       .replace(/⚋/g, "0")
       .trim(),
     changingLines,
-    judgment: clean(map.judgment || map.judgement || map.meaning || map.essence),
+    judgment: clean(pickField(map, "judgment", "judgement", "meaning", "essence")),
     imageText: clean(
-      map.image_text || map["image:_text"] || map.imagetext || map.description
+      pickField(map, "image_text", "image_text", "imagetext", "description")
     ),
     _raw: row,
   };
@@ -683,21 +697,16 @@ export const normalizeHexagramRow = (row) => {
 
 export async function loadHexagrams() {
   try {
-    const response = await fetch(SHEET_URL);
-    if (!response.ok) {
-      throw new Error(`Sheet request failed: ${response.status}`);
-    }
-    const json = await response.json();
-    return (json || [])
+    const { data, error } = await supabase.from("Hexagrams").select("*");
+
+    if (error) throw error;
+
+    return (data || [])
       .map(normalizeHexagramRow)
-      .filter((item) => item.name)
-      .sort((a, b) => {
-        const aNum = a.number ?? Infinity;
-        const bNum = b.number ?? Infinity;
-        return aNum - bNum;
-      });
-  } catch (error) {
-    console.log("Error loading sheet:", error?.message || error);
+      .filter((x) => x && x.name)
+      .sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
+  } catch (err) {
+    console.log("Error loading hexagrams:", err.message);
     return [];
   }
 }
