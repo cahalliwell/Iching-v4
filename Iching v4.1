@@ -630,57 +630,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
-const SUPABASE_DOMAIN = SUPABASE_URL.replace(/\/+$/, "");
-const SUPABASE_PUBLIC_STORAGE_BASE_URL = `${SUPABASE_DOMAIN}/storage/v1/object/public`;
-
 // 📜 Hexagram data helpers
 const clean = (value) => (value == null ? "" : String(value).trim());
-
-const pickFirstString = (value) => {
-  if (!value) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const resolved = pickFirstString(item);
-      if (resolved) return resolved;
-    }
-    return "";
-  }
-  if (typeof value === "object") {
-    return pickFirstString(
-      value.url ||
-        value.href ||
-        value.src ||
-        value.path ||
-        value.publicUrl ||
-        value.public_url ||
-        value.signedUrl ||
-        value.signed_url
-    );
-  }
-  return "";
-};
-
-const normalizeImageUrlValue = (value) => {
-  const raw = pickFirstString(value).trim();
-  if (!raw) return "";
-  if (/^(?:https?|data):/i.test(raw)) {
-    return raw.replace(/^http:\/\//i, "https://");
-  }
-  if (raw.startsWith("//")) {
-    return `https:${raw}`;
-  }
-  if (raw.startsWith("/")) {
-    return `${SUPABASE_DOMAIN}${raw}`;
-  }
-  if (raw.toLowerCase().startsWith("storage/")) {
-    return `${SUPABASE_DOMAIN}/${raw}`;
-  }
-  return `${SUPABASE_PUBLIC_STORAGE_BASE_URL}/${raw}`;
-};
 
 function normalizeKey(key = "") {
   return String(key)
@@ -730,21 +681,7 @@ export const normalizeHexagramRow = (row) => {
         "imagetext"
       )
     ),
-    imageUrl:
-      normalizeImageUrlValue(
-        pickField(
-          map,
-          "image",
-          "image_url",
-          "imageurl",
-          "image_uri",
-          "image_link",
-          "image_attachment",
-          "image_attachments",
-          "image_public_url",
-          "image_publicurl"
-        )
-      ) || null,
+    imageUrl: clean(pickField(map, "image", "image_url", "image_url")) || null,
     linesBinary: (pickField(map, "lines") || "")
       .replace(/⚊/g, "1")
       .replace(/⚋/g, "0")
